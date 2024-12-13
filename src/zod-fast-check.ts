@@ -337,8 +337,28 @@ const arbitraryBuilders: ArbitraryBuilders = {
       }
     }
   },
-  ZodBigInt() {
-    return fc.bigInt();
+  ZodBigInt(schema) {
+    let min = undefined;
+    let max = undefined;
+
+    for (const check of schema._def.checks) {
+        let value = check.value;
+        switch (check.kind) {
+            case "min":
+                value = check.inclusive ? value : value + BigInt(1);
+                min = min === undefined || value < min ? value : min;
+                break;
+            case "max":
+                value = check.inclusive ? value : value - BigInt(1);
+                max = max === undefined || value > max ? value : max;
+                break;
+            case "multipleOf":
+                // todo
+                break;
+        }
+    }
+
+    return fc.bigInt({ min, max });
   },
   ZodBoolean() {
     return fc.boolean();
