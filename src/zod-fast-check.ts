@@ -32,6 +32,7 @@ import {
   ZodTuple,
   ZodTypeDef,
   ZodUnion,
+  ZodReadonly
 } from "zod";
 
 const MIN_SUCCESS_RATE = 0.01;
@@ -565,6 +566,9 @@ const arbitraryBuilders: ArbitraryBuilders = {
   ZodSymbol() {
     return fc.string().map((s) => Symbol(s));
   },
+  ZodReadonly(schema: ZodReadonly<UnknownZodSchema>, path: string, recurse: SchemaToArbitrary) {
+    return recurse(schema._def.innerType, path).map((value) => Object.freeze(value));
+  }
 };
 
 export class ZodFastCheckError extends Error {}
