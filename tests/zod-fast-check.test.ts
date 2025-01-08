@@ -156,6 +156,18 @@ describe("Generate arbitraries for Zod schema input types", () => {
     "Coerced date": z.coerce.date(),
     "string with catch": z.string().catch("fallback"),
     symbol: z.symbol(),
+    readonly: z.number().readonly(),
+
+    // bigint tests
+    "bigint gt": z.bigint().gt(BigInt(5)),
+    "bigint gte": z.bigint().gte(BigInt(5)),
+    "bigint lt": z.bigint().lt(BigInt(5)),
+    "bigint lte": z.bigint().lte(BigInt(5)),
+    "bigint positive": z.bigint().positive(),
+    "bigint nonnegative": z.bigint().nonnegative(),
+    "bigint negative": z.bigint().negative(),
+    "bigint nonpositive": z.bigint().nonpositive(),
+    // todo - "bigint multipleof": z.bigint().multipleOf(BigInt(5)),
   };
 
   for (const [name, schema] of Object.entries(schemas)) {
