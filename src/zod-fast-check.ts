@@ -252,7 +252,9 @@ const arbitraryBuilders: ArbitraryBuilders = {
         case "uuid":
           return fc.uuid();
         case "email":
-          return fc.emailAddress();
+          // todo - remove once zod fixes special character support
+          const regex = new RegExp('[^a-zA-Z0-9@\\.\\+-]');
+          return fc.emailAddress().filter((email) => !regex.test(email));
         case "url":
           return fc.webUrl();
         case "datetime":

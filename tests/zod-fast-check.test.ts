@@ -137,7 +137,7 @@ describe("Generate arbitraries for Zod schema input types", () => {
     cuid2: z.string().cuid2(),
     uuid: z.string().uuid(),
     url: z.string().url(),
-    // todo - email: z.string().email(),
+    email: z.string().email(),
     regex: z.string().regex(/\s/),
     datetime: z.string().datetime(),
     "datetime with offset": z.string().datetime({ offset: true }),
