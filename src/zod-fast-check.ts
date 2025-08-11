@@ -33,6 +33,7 @@ import {
   ZodTypeDef,
   ZodUnion,
   ZodReadonly,
+  type ZodBigInt,
 } from "zod";
 
 const MIN_SUCCESS_RATE = 0.01;
@@ -342,9 +343,13 @@ const arbitraryBuilders: ArbitraryBuilders = {
       }
     }
   },
-  ZodBigInt(schema) {
+  ZodBigInt(schema: ZodBigInt, path: string) {
     let min = undefined;
     let max = undefined;
+
+    if (!schema._def.checks) {
+      unsupported(`Intersection`, path);
+    }
 
     for (const check of schema._def.checks) {
       let value = check.value;
