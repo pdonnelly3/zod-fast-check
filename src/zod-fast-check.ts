@@ -348,7 +348,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
     let max = undefined;
 
     if (!schema._def.checks) {
-      unsupported(`Intersection`, path);
+      unsupported(`BigInt`, path);
     }
 
     for (const check of schema._def.checks) {
