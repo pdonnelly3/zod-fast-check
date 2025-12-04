@@ -346,10 +346,14 @@ const arbitraryBuilders: ArbitraryBuilders = {
     // Use a reasonable range to avoid very small floats (like 5e-324)
     // that can cause issues with refinements and modulo operations
     // Use a minimum that's much larger than Number.MIN_VALUE to avoid edge cases
+    // Initialize max to undefined to track if user specified a max constraint
+    // We'll apply defaults (1e6 for floats, Number.MAX_SAFE_INTEGER for ints) only if no explicit max
     let min = -1e6;
-    let max = 1e6;
+    let max: number | undefined = undefined; // undefined means no explicit max constraint yet
+    let hasExplicitMax = false; // Track if user specified a max constraint
     let isFinite = false;
     let multipleOf: number | null = null;
+    let hasSafeIntFormat = false; // Track if we need to constrain to safe integer range
     const customChecks: any[] = []; // Track refinements (custom checks) for pattern detection
 
     const checks = schema._zod.def.checks;
@@ -364,6 +368,8 @@ const arbitraryBuilders: ArbitraryBuilders = {
       }).filter(x => Math.abs(x) >= 1e-10 || x === 0);
     }
 
+    // First pass: Process all min/max constraints and format checks
+    // We need to process min/max constraints first, then apply safe integer range constraint
     for (const check of checks) {
       const checkType = check._zod.def.check;
       switch (checkType) {
@@ -376,21 +382,22 @@ const arbitraryBuilders: ArbitraryBuilders = {
           break;
         case "less_than":
           isFinite = true;
+          hasExplicitMax = true; // User specified a max constraint
           const ltDef = check._zod.def as any;
-          max = Math.min(
-            max,
-            ltDef.inclusive ? ltDef.value : ltDef.value - 0.001
-          );
+          const ltValue = ltDef.inclusive ? ltDef.value : ltDef.value - 0.001;
+          if (max === undefined) {
+            max = ltValue;
+          } else {
+            max = Math.min(max, ltValue);
+          }
           break;
         case "number_format":
           const formatDef = check._zod.def as any;
           if (formatDef.format === "int32" || formatDef.format === "uint32" || formatDef.format === "safeint") {
             multipleOf ??= 1;
-            // For safeint, ensure we stay within safe integer range
-            // This prevents generating numbers like -9007199254740992 which are outside safe range
+            // For safeint, we'll apply the safe integer range constraint after processing all min/max constraints
             if (formatDef.format === "safeint") {
-              min = Math.max(min, Number.MIN_SAFE_INTEGER);
-              max = Math.min(max, Number.MAX_SAFE_INTEGER);
+              hasSafeIntFormat = true;
             }
           }
           break;
@@ -405,20 +412,64 @@ const arbitraryBuilders: ArbitraryBuilders = {
       }
     }
 
+    // Apply safe integer range constraint after processing all min/max constraints
+    // This ensures user-specified min/max values take precedence, and we only constrain
+    // to safe integer range if the bounds are outside that range
+    if (hasSafeIntFormat) {
+      min = Math.max(min, Number.MIN_SAFE_INTEGER);
+      if (max === undefined) {
+        // No explicit max, use safe integer range as default for integers
+        max = Number.MAX_SAFE_INTEGER;
+      } else {
+        // User specified max, but constrain to safe integer range
+        max = Math.min(max, Number.MAX_SAFE_INTEGER);
+      }
+    }
+
     // Build the base arbitrary that generates random numbers within bounds/parameters
     let arbitrary: Arbitrary<number>;
     if (multipleOf !== null) {
       const factor = multipleOf;
+      // For integers, max should be defined at this point (either from user constraint or safe int default)
+      const finalMax = max ?? Number.MAX_SAFE_INTEGER;
+      const integerMin = Math.ceil(min / factor);
+      let integerMax = Math.floor(finalMax / factor);
+      
+      // For safe integers, ensure we don't generate values outside the safe integer range
+      // This prevents generating Number.MAX_SAFE_INTEGER + 1 or similar unsafe values
+      if (hasSafeIntFormat) {
+        // Calculate the maximum safe integer we can generate after multiplication
+        const maxSafeIntegerAfterFactor = Math.floor(Number.MAX_SAFE_INTEGER / factor);
+        integerMax = Math.min(integerMax, maxSafeIntegerAfterFactor);
+      }
+      
+      // Validate that min <= max before calling fc.integer()
+      // This prevents "fc.integer maximum value should be equal or greater than the minimum one" errors
+      if (integerMin > integerMax) {
+        throw new ZodFastCheckGenerationError(
+          `Unable to generate valid integer values for schema at "${path}": ` +
+          `computed min (${integerMin}) is greater than max (${integerMax}). ` +
+          `This may occur when constraints are impossible to satisfy (e.g., min > max). ` +
+          `An override is must be provided for this schema.`
+        );
+      }
+      
       arbitrary = fc
         .integer({
-          min: Math.ceil(min / factor),
-          max: Math.floor(max / factor),
+          min: integerMin,
+          max: integerMax,
         })
         .map((x) => x * factor);
     } else {
+      // For floating-point numbers, apply reasonable defaults only if user didn't specify constraints
+      // If user specified a max constraint, respect it (but still cap at safe integer range for safety)
+      const doubleMax = max !== undefined
+        ? Math.min(max, Number.MAX_SAFE_INTEGER) // User specified max, respect it (but cap at safe range)
+        : 1e6; // No explicit max, use reasonable default
+      
       const finiteArb = fc.double({
         min: Math.max(min, -1e6), // Ensure reasonable range to avoid very small floats
-        max: Math.min(max, 1e6),
+        max: doubleMax,
         // fast-check 3 considers NaN to be a Number by default,
         // but Zod does not consider NaN to be a Number
         // see https://github.com/dubzzz/fast-check/blob/main/packages/fast-check/MIGRATION_2.X_TO_3.X.md#new-floating-point-arbitraries-
@@ -464,7 +515,9 @@ const arbitraryBuilders: ArbitraryBuilders = {
       let smartArbitrary: Arbitrary<number> | null = null;
       
       for (const customCheck of customChecks) {
-        const smart = tryGenerateSmartlyForRefinement(customCheck, min, max);
+        // Use a default max value if not specified (for refinements, we'll filter anyway)
+        const finalMax = max ?? (hasSafeIntFormat ? Number.MAX_SAFE_INTEGER : 1e6);
+        const smart = tryGenerateSmartlyForRefinement(customCheck, min, finalMax);
         if (smart) {
           // Pattern detected! Use smart generation (no filtering needed)
           smartArbitrary = smart;
