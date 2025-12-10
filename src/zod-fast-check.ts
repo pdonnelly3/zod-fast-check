@@ -4,10 +4,7 @@ import type {
   ZodArray,
   ZodCatch,
   ZodDefault,
-  ZodDiscriminatedUnion,
-  ZodEnum,
   ZodFunction,
-  ZodLiteral,
   ZodMap,
   ZodNullable,
   ZodNumber,
@@ -19,7 +16,6 @@ import type {
   ZodSchema,
   ZodSet,
   ZodString,
-  ZodSymbol,
   ZodTuple,
   ZodUnion,
   ZodReadonly,
@@ -45,7 +41,7 @@ type ArbitraryBuilder<Schema extends UnknownZodSchema> = (
 ) => Arbitrary<z.input<Schema>>;
 
 // In zod4, we use the type string directly instead of ZodFirstPartyTypeKind enum
-type SchemaTypeName = 
+type SchemaTypeName =
   | "string"
   | "number"
   | "int"
@@ -153,7 +149,7 @@ class _ZodFastCheck {
 
     // Extract type name from constructor, removing 'Zod' prefix if present
     const constructorName = schema.constructor.name;
-    const typeName = constructorName.startsWith('Zod') 
+    const typeName = constructorName.startsWith('Zod')
       ? constructorName.slice(3) // Remove 'Zod' prefix
       : constructorName;
     unsupported(typeName, path);
@@ -188,7 +184,16 @@ class _ZodFastCheck {
           ""
         )
       )
-      .map((parsed) => parsed.data);
+      .map((parsed) => {
+        if (!parsed.success) {
+            throw {
+                message: 'Failed to generate valid output for your schema',
+                error: parsed.error
+            };
+        }
+
+        return parsed.data;
+      });
   }
 
   private findOverride<Input>(
@@ -311,10 +316,10 @@ const arbitraryBuilders: ArbitraryBuilders = {
     }
 
     // Check if we have a format requirement that needs special handling
-    const hasEmailFormat = checks?.some((c: any) => 
+    const hasEmailFormat = checks?.some((c: any) =>
       c._zod.def.check === "string_format" && c._zod.def.format === "email"
     );
-    
+
     if (hasEmailFormat) {
       // For email, apply length constraints
       const emailArb = fc.emailAddress().filter((email) => ZOD_EMAIL_REGEX.test(email));
@@ -360,11 +365,11 @@ const arbitraryBuilders: ArbitraryBuilders = {
     if (!checks) {
       // Use reasonable range to avoid very small floats (like 5e-324)
       // Filter out numbers smaller than 1e-10 to avoid precision issues with refinements
-      return fc.double({ 
-        min: -1e6, 
+      return fc.double({
+        min: -1e6,
         max: 1e6,
-        noNaN: true, 
-        noDefaultInfinity: true 
+        noNaN: true,
+        noDefaultInfinity: true
       }).filter(x => Math.abs(x) >= 1e-10 || x === 0);
     }
 
@@ -434,7 +439,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
       const finalMax = max ?? Number.MAX_SAFE_INTEGER;
       const integerMin = Math.ceil(min / factor);
       let integerMax = Math.floor(finalMax / factor);
-      
+
       // For safe integers, ensure we don't generate values outside the safe integer range
       // This prevents generating Number.MAX_SAFE_INTEGER + 1 or similar unsafe values
       if (hasSafeIntFormat) {
@@ -442,7 +447,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
         const maxSafeIntegerAfterFactor = Math.floor(Number.MAX_SAFE_INTEGER / factor);
         integerMax = Math.min(integerMax, maxSafeIntegerAfterFactor);
       }
-      
+
       // Validate that min <= max before calling fc.integer()
       // This prevents "fc.integer maximum value should be equal or greater than the minimum one" errors
       if (integerMin > integerMax) {
@@ -453,7 +458,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
           `An override is must be provided for this schema.`
         );
       }
-      
+
       arbitrary = fc
         .integer({
           min: integerMin,
@@ -466,7 +471,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
       const doubleMax = max !== undefined
         ? Math.min(max, Number.MAX_SAFE_INTEGER) // User specified max, respect it (but cap at safe range)
         : 1e6; // No explicit max, use reasonable default
-      
+
       const finiteArb = fc.double({
         min: Math.max(min, -1e6), // Ensure reasonable range to avoid very small floats
         max: doubleMax,
@@ -487,7 +492,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
     }
 
     // DECISION TREE: Handle refinements (custom checks) using hybrid approach
-    // 
+    //
     // Goal: Generate random numbers within bounds/parameters, then ensure they pass refinements.
     // Strategy: Try smart generation first (fast), fall back to filtering (general).
     //
@@ -513,7 +518,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
       // Try to detect patterns and generate smartly for each custom check
       // If any check can be handled smartly, use that; otherwise fall back to filtering
       let smartArbitrary: Arbitrary<number> | null = null;
-      
+
       for (const customCheck of customChecks) {
         // Use a default max value if not specified (for refinements, we'll filter anyway)
         const finalMax = max ?? (hasSafeIntFormat ? Number.MAX_SAFE_INTEGER : 1e6);
@@ -591,7 +596,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
   ) {
     let minLength = 0;
     let maxLength: number | undefined = undefined;
-    
+
     const checks = schema._zod.def.checks;
     if (checks) {
       for (const check of checks) {
@@ -606,7 +611,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
         }
       }
     }
-    
+
     return fc.array(recurse(schema._zod.def.element as UnknownZodSchema, path + "[*]"), {
       minLength,
       maxLength,
@@ -661,7 +666,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
   set(schema: ZodSet, path: string, recurse: SchemaToArbitrary) {
     let minLength = 0;
     let maxLength: number | undefined = undefined;
-    
+
     const checks = schema._zod.def.checks;
     if (checks) {
       for (const check of checks) {
@@ -784,7 +789,7 @@ const arbitraryBuilders: ArbitraryBuilders = {
     // In zod4, discriminated union uses options (Map)
     const def = schema._zod.def as any;
     const options = def.options;
-    
+
     // Handle both Map and array types
     let keys: string[];
     if (options instanceof Map) {
@@ -948,7 +953,7 @@ const isUnionMember =
 /**
  * Attempts to detect common refinement patterns and generate values smartly.
  * Returns an arbitrary if a pattern is detected, null otherwise.
- * 
+ *
  * @param check - The custom check (refinement) to analyze
  * @param min - Minimum value for the number range
  * @param max - Maximum value for the number range
@@ -969,7 +974,7 @@ function tryGenerateSmartlyForRefinement(
   // Test with a few values to see if it matches the pattern
   const testValues = [0, 1, 2, 3, 6, 9, 12, -3, -6];
   let moduloDivisor: number | null = null;
-  
+
   for (const testVal of testValues) {
     const result = refinementFn(testVal);
     if (result === true && testVal % 3 === 0) {
@@ -980,7 +985,7 @@ function tryGenerateSmartlyForRefinement(
       }
     }
   }
-  
+
   // If we detected a modulo pattern, generate multiples directly
   if (moduloDivisor !== null) {
     // Generate integers in range, then multiply by divisor
