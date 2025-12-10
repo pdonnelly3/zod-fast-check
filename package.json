@@ -6,7 +6,7 @@
   "types": "dist/zod-fast-check.d.ts",
   "scripts": {
     "build": "tsc",
-    "lint": "prettier --check src",
+    "lint": "prettier src --write",
     "test": "jest",
     "prepare": "npm run build",
     "prepublishOnly": "npm test",
