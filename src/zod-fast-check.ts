@@ -441,6 +441,15 @@ const arbitraryBuilders: ArbitraryBuilders = {
         // Calculate the maximum safe integer we can generate after multiplication
         const maxSafeIntegerAfterFactor = Math.floor(Number.MAX_SAFE_INTEGER / factor);
         integerMax = Math.min(integerMax, maxSafeIntegerAfterFactor);
+        
+        // When factor is 1 (no multipleOf), leave headroom for potential transformations
+        // (e.g., doubling) that might be applied to the generated values.
+        // This ensures transformed values stay within the safe integer range.
+        if (factor === 1) {
+          // Generate at most half of MAX_SAFE_INTEGER to leave room for doubling
+          const maxForTransformations = Math.floor(Number.MAX_SAFE_INTEGER / 2);
+          integerMax = Math.min(integerMax, maxForTransformations);
+        }
       }
       
       // Validate that min <= max before calling fc.integer()
