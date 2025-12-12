@@ -1,13 +1,10 @@
 import fc, { Arbitrary } from "fast-check";
-import * as z from "zod";
 import type {
   ZodArray,
+  ZodBigInt,
   ZodCatch,
   ZodDefault,
-  ZodDiscriminatedUnion,
-  ZodEnum,
   ZodFunction,
-  ZodLiteral,
   ZodMap,
   ZodNullable,
   ZodNumber,
@@ -15,16 +12,15 @@ import type {
   ZodOptional,
   ZodPromise,
   ZodRawShape,
+  ZodReadonly,
   ZodRecord,
   ZodSchema,
   ZodSet,
   ZodString,
-  ZodSymbol,
   ZodTuple,
-  ZodUnion,
-  ZodReadonly,
-  ZodBigInt,
+  ZodUnion
 } from "zod";
+import * as z from "zod";
 
 const MIN_SUCCESS_RATE = 0.01;
 const ZOD_EMAIL_REGEX =
@@ -441,6 +437,16 @@ const arbitraryBuilders: ArbitraryBuilders = {
         // Calculate the maximum safe integer we can generate after multiplication
         const maxSafeIntegerAfterFactor = Math.floor(Number.MAX_SAFE_INTEGER / factor);
         integerMax = Math.min(integerMax, maxSafeIntegerAfterFactor);
+        
+        // When factor is 1 (no multipleOf), leave headroom for potential transformations
+        // (e.g., doubling) that might be applied to the generated values.
+        // This ensures transformed values stay within the safe integer range.
+        if (factor === 1) {
+          // Generate at most half of (MAX_SAFE_INTEGER - 1) to leave room for doubling
+          // We subtract 1 to be extra conservative and avoid any edge cases with rounding
+          const maxForTransformations = Math.floor((Number.MAX_SAFE_INTEGER - 1) / 2);
+          integerMax = Math.min(integerMax, maxForTransformations);
+        }
       }
       
       // Validate that min <= max before calling fc.integer()
